@@ -1,0 +1,59 @@
+---
+title: "ADS-506 – Final Team Project - Analysis and Forecasting of Retail Sales"
+author: "Team 6 - Dipraj Bista, Jessica Hin, Roger "
+date: "Nov 5, 2023"
+output: pdf_document
+---
+
+# Analysis and Forecasting of Retail Sales
+
+# 1. Intro and EDA
+
+## Data Source
+
+This is a dataset from the U.S. Census Bureau hosted by the Federal Reserve Economic Database (FRED). It is a CSV file that contains sales amounts at 4 different retail stores, each month from 1992 to 2018. The 4 stores are each part of a different sector: furniture, food, used cars and pharmacy. The dataset is available in Kaggle.com here: <https://www.kaggle.com/datasets/census/retail-and-retailers-sales-time-series-collection/data>
+
+## Importing the Data
+
+```{r}
+# import and inspect the data
+df <- read.csv("retail_sales.csv")
+head(df)
+```
+
+## Time Series Plot
+
+```{r}
+# time series plot for each of the 4 stores
+
+# convert to matrix, frequency is 12 months, starts at 1992
+furniture_sales <- ts(df$furniture_sales, frequency = 12, start = 1992)
+furniture_sales
+```
+
+```{r}
+plot(furniture_sales, xlab = "Months", ylab = "Furniture sales",  main = "Furniture Sales Over Time")
+```
+
+```{r}
+food_sales <- ts(df$food_sales, frequency = 12, start = 1992)
+plot(food_sales, xlab = "Months", ylab = "Food sales",  main = "Food Sales Over Time")
+```
+
+```{r}
+used_car_sales <- ts(df$used_car_sales, frequency = 12, start = 1992)
+plot(used_car_sales, xlab = "Months", ylab = "Used Car sales",  main = "Used Car Sales Over Time")
+```
+
+```{r}
+pharmacy_sales <- ts(df$pharmacy_sales, frequency = 12, start = 1992)
+plot(pharmacy_sales, xlab = "Months", ylab = "Pharmacy sales", main = "Pharmacy Sales Over Time")
+```
+
+## Discussion
+
+Between the 4 different stores and their area of sales, we can see that there are differences in their seasonality, noise and how they react to certain factors such as the 2008 economic downturn. Overall, sales at all 4 stores have a upward trend. The downturn in 2008 seems to have impacted furniture and food sales the most, followed by used cars. It does not seem to have effected pharmacy sales.
+
+This data can be used to better understand and predict customer purchase behavior and purchase patterns depending on time of the year as well as if there are any correlations between the different sectors. If there are certain months or seasons of the year where a certain store does better, then it would be beneficial to focus any marketing or ads during that period. If there are times were sales have always been slow, then it would be ideal to cut costs during that time such as having a smaller staff or a freeze on marketing during that time.
+
+Given the large time span of this data and the clear visual trends, I believe it can definitely help all 4 of these stores better understand their customers purchasing patterns and behavior and thus help their business. ...
