@@ -1,6 +1,6 @@
 ---
 title: "ADS-506 – Final Team Project - Analysis and Forecasting of Retail Sales"
-author: "Team 6 - Dipraj Bista, Jessica Hin, Roger "
+author: "Team 6 - Dipraj Bista, Jessica Hin, Roger Qiu "
 date: "Nov 5, 2023"
 output: pdf_document
 ---
@@ -16,6 +16,13 @@ This is a dataset from the U.S. Census Bureau hosted by the Federal Reserve Econ
 ## Importing the Data
 
 ```{r}
+
+library(fpp2)
+library(dplyr)
+library(zoo)
+library(readr)
+library(ggplot2)
+library(gridExtra)
 # import and inspect the data
 df <- read.csv("retail_sales.csv")
 head(df)
@@ -47,13 +54,169 @@ plot(used_car_sales, xlab = "Months", ylab = "Used Car sales",  main = "Used Car
 
 ```{r}
 pharmacy_sales <- ts(df$pharmacy_sales, frequency = 12, start = 1992)
-plot(pharmacy_sales, xlab = "Months", ylab = "Pharmacy sales", main = "Pharmacy Sales Over Time")
+autoplot(pharmacy_sales) +
+  xlim(2010,2018)
+pharmacy_sales
 ```
 
-## Discussion
+## Discussion for EDA
 
 Between the 4 different stores and their area of sales, we can see that there are differences in their seasonality, noise and how they react to certain factors such as the 2008 economic downturn. Overall, sales at all 4 stores have a upward trend. The downturn in 2008 seems to have impacted furniture and food sales the most, followed by used cars. It does not seem to have effected pharmacy sales.
 
 This data can be used to better understand and predict customer purchase behavior and purchase patterns depending on time of the year as well as if there are any correlations between the different sectors. If there are certain months or seasons of the year where a certain store does better, then it would be beneficial to focus any marketing or ads during that period. If there are times were sales have always been slow, then it would be ideal to cut costs during that time such as having a smaller staff or a freeze on marketing during that time.
 
-Given the large time span of this data and the clear visual trends, I believe it can definitely help all 4 of these stores better understand their customers purchasing patterns and behavior and thus help their business. ...
+Given the large time span of this data and the clear visual trends, I believe it can definitely help all 4 of these stores better understand their customers purchasing patterns and behavior and thus help their business.
+
+## Preprocessing
+
+There is not much reprocessing to do for this data set. There are no missing values, the series is not unequally spaced, and no outliers. The only consideration is to use the data only after 2008 because of the housing market crash. Inclusion of years before 2008 can potentially add disruptive information. So let's first re-partition the data for only 2008 and beyond. 
+
+```{r subset the data from 2008 and beyond}
+# convert to matrix, frequency is 12 months, starts at 1992
+new_df <- df[193:321,]
+furn_sales <- ts(new_df$furniture_sales, frequency = 12, start = 2008, end = 2018)
+food_sales <- ts(new_df$food_sales, frequency = 12, start = 2008, end = 2018)
+car_sales <- ts(new_df$used_car_sales, frequency = 12, start = 2008, end = 2018)
+pharm_sales <- ts(new_df$pharmacy_sales, frequency = 12, start = 2008, end = 2018)
+
+# plotting the newly subsetted data
+p1 <- autoplot(furn_sales) +
+  ggtitle("Furniture Sales Over Time")
+
+p2 <-autoplot(food_sales) +
+  ggtitle("Food sales Over Time")
+
+p3 <- autoplot(car_sales) +
+  ggtitle("Used Car sales Over Time")
+
+p4 <- autoplot(pharm_sales) +
+  ggtitle("Pharmacy sales Over Time")
+
+grid.arrange(p1, p2, p3, p4, nrow = 2, ncol = 2)
+
+```
+Now, let's look at the ACF plots first to check for trend and seasonality for each category.
+* Furniture sales: Need to twice difference because there's a trend and seasonality component for this category.
+* Food Sales: Only need to difference once for the trend component, no obvious seasonality.
+* Car sales: Need to twice difference because there's a trend and seasonality component for this category.
+* Pharmacy Sales: Need to twice difference because there's a trend and seasonality component for this category.
+
+```{r acf plots}
+
+# acf plots for furniture Sales
+
+acf(furn_sales, lag.max = 120) # there is a positive trend
+acf(diff(furn_sales), lag.max = 120) # now you can see there's seasonality @ every lag
+
+# twice differencing the furniture sales series
+furn_sales_twice <- diff(diff(furn_sales, lag = 12), lag = 1)
+
+# plotting the new series
+p5 <- autoplot(furn_sales_twice) +
+  ggtitle("Twice Difference Furniture Sales Over Time")
+
+# acf plots for food sales
+acf(food_sales, lag.max = 120) # there is a positive trend
+acf(diff(food_sales), lag.max = 120) # no obvious seasonality, just need to difference once
+
+# lag 1 differencing the data
+food_sales_once <- diff(food_sales, lag = 1)
+
+p6 <- autoplot(food_sales_once) +
+  ggtitle("Differenced Food Sales Over Time")
+
+# acf plots for used car sales
+acf(car_sales, lag.max = 120) # there is a positive trend
+acf(diff(car_sales), lag.max = 120) # obvious seasonality, just need to difference twice
+
+# lag 1 differencing the data
+car_sales_twice <- diff(diff(car_sales, lag = 12), lag = 1)
+
+p7 <- autoplot(car_sales_twice) +
+  ggtitle("Twice Differenced Used Car Sales Over Time")
+
+# acf plots for used pharmacy sales
+acf(pharm_sales, lag.max = 120) # there is a positive trend
+acf(diff(pharm_sales), lag.max = 120) # obvious seasonality, just need to difference twice
+
+# lag 1 differencing the data
+pharm_sales_twice <- diff(diff(pharm_sales, lag = 12), lag = 1)
+
+p8 <- autoplot(car_sales_twice) +
+  ggtitle("Twice Differenced Pharmacy Sales Over Time")
+
+grid.arrange(p5, p6, p7, p8, nrow = 2, ncol = 2)
+```
+Finally, we can split the data into a training and test set for each category.
+
+```{r train test split}
+# train/test split for furniture sales
+furn_train <- window(furn_sales_twice, start = c(2009,2), end = c(2016,12))
+furn_test <- window(furn_sales_twice, start = c(2017,1))
+
+# train/test split for food sales
+food_train <- window(food_sales_once, start = c(2008,2), end = c(2016,12))
+food_test <- window(food_sales_once, start = c(2017,1))
+
+# train/test split for used car sales
+car_train <- window(car_sales_twice, start = c(2009,2), end = c(2016,12))
+car_test <- window(car_sales_twice, start = c(2017,1))
+
+# train/test split for pharmacy sales
+pharm_train <- window(pharm_sales_twice, start = c(2009,2), end = c(2016,12))
+pharm_test <- window(pharm_sales_twice, start = c(2017,1))
+```
+
+
+## Modeling
+
+### Naive Forecasts
+
+```{r naive model}
+
+# naive model for furniture sales and plotting it
+steps_ahead <- length(furn_test)
+naive_furn <- naive(furn_train, h = steps_ahead)
+furn_error <- furn_test - naive_furn$mean[steps_ahead]
+furn_rmse <- sqrt(mean(furn_error ^2))
+autoplot(furn_train) +
+  autolayer(naive_furn) +
+  ggtitle("Naive Forecasts of Furniture Sales")
+
+# naive model for food sales
+naive_food <- naive(food_train, h = steps_ahead)
+food_error <- food_test - naive_food$mean[steps_ahead]
+food_rmse <- sqrt(mean(food_error^2))
+autoplot(food_train) +
+  autolayer(naive_food) +
+  ggtitle("Naive Forecasts of Food Sales")
+
+# naive model for used car sales
+naive_car <- naive(car_train, h = steps_ahead)
+car_error <- car_test - naive_car$mean[steps_ahead]
+car_rmse <- sqrt(mean(car_error^2))
+autoplot(car_train) +
+  autolayer(naive_car) +
+  ggtitle("Naive Forecasts of Used Car Sales")
+
+# naive model for pharmacy sales
+naive_pharm <- naive(pharm_train, h = steps_ahead)
+pharm_error <- pharm_test - naive_pharm$mean[steps_ahead]
+pharm_rmse <- sqrt(mean(pharm_error^2))
+autoplot(pharm_train) +
+  autolayer(naive_pharm) +
+  ggtitle("Naive Forecasts of Pharmacy Sales")
+
+# table of naive RMSEs
+
+results_tab <- matrix(c(furn_rmse, food_rmse, car_rmse, pharm_rmse), ncol = 1, byrow = TRUE)
+rownames(results_tab) <- c('naive_furn','naive_food', 'naive_car', 'naive_pharm')
+colnames(results_tab) <- c('RMSE')
+results_tab <- as.table(results_tab)
+results_tab
+
+
+```
+
+
+
