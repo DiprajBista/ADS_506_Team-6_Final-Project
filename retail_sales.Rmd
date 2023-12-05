@@ -1,8 +1,10 @@
 ---
 title: "ADS-506 – Final Team Project - Analysis and Forecasting of Retail Sales"
-author: "Team 6 - Dipraj Bista, Jessica Hin, Roger "
+author: "Team 6 - Dipraj Bista, Jessica Hin, Roger Qiu "
 date: "Nov 5, 2023"
-output: pdf_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 # Analysis and Forecasting of Retail Sales
@@ -16,6 +18,15 @@ This is a dataset from the U.S. Census Bureau hosted by the Federal Reserve Econ
 ## Importing the Data
 
 ```{r}
+library(fpp2)
+library(dplyr)
+library(zoo)
+library(readr)
+library(ggplot2)
+library(gridExtra)
+library(tsibble)
+library(fable)
+
 # import and inspect the data
 df <- read.csv("retail_sales.csv")
 head(df)
@@ -32,28 +43,563 @@ furniture_sales
 ```
 
 ```{r}
-plot(furniture_sales, xlab = "Months", ylab = "Furniture sales",  main = "Furniture Sales Over Time")
+plot(furniture_sales, xlab = "Years", ylab = "Furniture sales",  main = "Furniture Sales Over Time")
+abline(v= 2008, col = "red", lty = 2)
+abline(v= 2009, col = "blue", lty = 2) 
+
+new_furn_sales <- window(furniture_sales,start = c(2008,1), end = c(2009,1)) %>% as_tsibble()
+
+autoplot(new_furn_sales) +
+  labs(x = "Months")
 ```
 
 ```{r}
 food_sales <- ts(df$food_sales, frequency = 12, start = 1992)
-plot(food_sales, xlab = "Months", ylab = "Food sales",  main = "Food Sales Over Time")
+plot(food_sales, xlab = "Years", ylab = "Food sales",  main = "Food Sales Over Time")
+abline(v= 2008, col = "red", lty = 2)
+abline(v= 2009, col = "blue", lty = 2)
+
+new_food_sales <- window(food_sales,start = c(2008,1), end = c(2009,1)) %>% as_tsibble()
+autoplot(new_food_sales) +
+  labs(x = "Months") 
 ```
 
 ```{r}
 used_car_sales <- ts(df$used_car_sales, frequency = 12, start = 1992)
-plot(used_car_sales, xlab = "Months", ylab = "Used Car sales",  main = "Used Car Sales Over Time")
+plot(used_car_sales, xlab = "Years", ylab = "Used Car sales",  main = "Used Car Sales Over Time")
+abline(v= 2008, col = "red", lty = 2)
+abline(v= 2009, col = "blue", lty = 2)
+
+new_car_sales <- window(used_car_sales,start = c(2008,1), end = c(2009,1)) %>% as_tsibble()
+autoplot(new_car_sales) +
+  labs(x = "Months")
 ```
 
 ```{r}
 pharmacy_sales <- ts(df$pharmacy_sales, frequency = 12, start = 1992)
-plot(pharmacy_sales, xlab = "Months", ylab = "Pharmacy sales", main = "Pharmacy Sales Over Time")
+plot(pharmacy_sales, xlab = "Years", ylab = "Pharmacy sales",  main = "Pharmacy Sales Over Time")
+abline(v= 2008, col = "red", lty = 2)
+abline(v= 2009, col = "blue", lty = 2) 
+
+new_pharm_sales <- window(pharmacy_sales,start = c(2008,1), end = c(2009,1)) %>% as_tsibble()
+autoplot(new_pharm_sales) +
+  labs(x = "Months")
 ```
 
-## Discussion
+## Discussion for EDA
 
 Between the 4 different stores and their area of sales, we can see that there are differences in their seasonality, noise and how they react to certain factors such as the 2008 economic downturn. Overall, sales at all 4 stores have a upward trend. The downturn in 2008 seems to have impacted furniture and food sales the most, followed by used cars. It does not seem to have effected pharmacy sales.
 
 This data can be used to better understand and predict customer purchase behavior and purchase patterns depending on time of the year as well as if there are any correlations between the different sectors. If there are certain months or seasons of the year where a certain store does better, then it would be beneficial to focus any marketing or ads during that period. If there are times were sales have always been slow, then it would be ideal to cut costs during that time such as having a smaller staff or a freeze on marketing during that time.
 
-Given the large time span of this data and the clear visual trends, I believe it can definitely help all 4 of these stores better understand their customers purchasing patterns and behavior and thus help their business. ...
+Given the large time span of this data and the clear visual trends, I believe it can definitely help all 4 of these stores better understand their customers purchasing patterns and behavior and thus help their business.
+
+## Preprocessing
+
+There is not much reprocessing to do for this data set. There are no missing values, the series is not unequally spaced, and no outliers. The only consideration is to use the data only after 2008 because of the housing market crash. Inclusion of years before 2008 can potentially add disruptive information. So let's first re-partition the data for only 2008 and beyond. 
+
+```{r subset the data from 2008 and beyond}
+# convert to matrix, frequency is 12 months, starts at 1992
+new_df <- df[193:321,]
+furn_sales <- ts(new_df$furniture_sales, frequency = 12, start = 2008, end = 2018)
+food_sales <- ts(new_df$food_sales, frequency = 12, start = 2008, end = 2018)
+car_sales <- ts(new_df$used_car_sales, frequency = 12, start = 2008, end = c(2018))
+pharm_sales <- ts(new_df$pharmacy_sales, frequency = 12, start = 2008, end = 2018)
+
+# plotting the newly subsetted data
+p1 <- autoplot(furn_sales) +
+  ggtitle("Furniture Sales Over Time")
+
+p2 <-autoplot(food_sales) +
+  ggtitle("Food sales Over Time")
+
+p3 <- autoplot(car_sales) +
+  ggtitle("Used Car sales Over Time")
+
+p4 <- autoplot(pharm_sales) +
+  ggtitle("Pharmacy sales Over Time")
+
+grid.arrange(p1, p2, p3, p4, nrow = 2, ncol = 2)
+
+```
+Now, let's look at the ACF plots first to check for trend and seasonality for each category.
+* Furniture sales: Need to twice difference because there's a trend and seasonality component for this category.
+* Food Sales: Only need to difference once for the trend component, no obvious seasonality.
+* Car sales: Need to twice difference because there's a trend and seasonality component for this category.
+* Pharmacy Sales: Need to twice difference because there's a trend and seasonality component for this category.
+
+```{r acf plots}
+
+# acf plots for furniture Sales
+
+acf(furn_sales, lag.max = 120) # there is a positive trend
+acf(diff(furn_sales), lag.max = 120) # now you can see there's seasonality @ every lag
+
+# twice differencing the furniture sales series
+furn_sales_twice <- diff(diff(furn_sales, lag = 12), lag = 1)
+
+# plotting the new series
+p5 <- autoplot(furn_sales_twice) +
+  ggtitle("Twice Difference Furniture Sales Over Time")
+
+# acf plots for food sales
+acf(food_sales, lag.max = 120) # there is a positive trend
+acf(diff(food_sales), lag.max = 120) # no obvious seasonality, just need to difference once
+
+# lag 1 differencing the data
+food_sales_once <- diff(food_sales, lag = 1)
+
+p6 <- autoplot(food_sales_once) +
+  ggtitle("Differenced Food Sales Over Time")
+
+# acf plots for used car sales
+acf(car_sales, lag.max = 120) # there is a positive trend
+acf(diff(car_sales), lag.max = 120) # obvious seasonality, just need to difference twice
+
+# lag 1 differencing the data
+car_sales_twice <- diff(diff(car_sales, lag = 12), lag = 1)
+
+p7 <- autoplot(car_sales_twice) +
+  ggtitle("Twice Differenced Used Car Sales Over Time")
+
+# acf plots for used pharmacy sales
+acf(pharm_sales, lag.max = 120) # there is a positive trend
+acf(diff(pharm_sales), lag.max = 120) # obvious seasonality, just need to difference twice
+
+# lag 1 differencing the data
+pharm_sales_twice <- diff(diff(pharm_sales, lag = 12), lag = 1)
+
+p8 <- autoplot(car_sales_twice) +
+  ggtitle("Twice Differenced Pharmacy Sales Over Time")
+
+grid.arrange(p5, p6, p7, p8, nrow = 2, ncol = 2)
+```
+Finally, we can split the data into a training and test set for each category.
+
+```{r train test split}
+# train/test split for furniture sales
+furn_train <- window(furn_sales_twice, start = c(2009,2), end = c(2016,12))
+furn_test <- window(furn_sales_twice, start = c(2017,1))
+
+# train/test split for food sales
+food_train <- window(food_sales_once, start = c(2008,2), end = c(2016,12))
+food_test <- window(food_sales_once, start = c(2017,1))
+
+# train/test split for used car sales
+car_train <- window(car_sales_twice, start = c(2009,2), end = c(2016,12))
+car_test <- window(car_sales_twice, start = c(2017,1))
+
+# train/test split for pharmacy sales
+pharm_train <- window(pharm_sales_twice, start = c(2009,2), end = c(2016,12))
+pharm_test <- window(pharm_sales_twice, start = c(2017,1))
+```
+
+
+## Modeling
+
+### Naive Forecasts
+
+```{r naive model}
+
+# naive model for furniture sales and plotting it
+steps_ahead <- length(furn_test)
+naive_furn <- naive(furn_train, h = steps_ahead)
+furn_error <- furn_test - naive_furn$mean[steps_ahead]
+furn_rmse <- sqrt(mean(furn_error ^2))
+autoplot(furn_train) +
+  autolayer(naive_furn) +
+  ggtitle("Naive Forecasts of Furniture Sales")
+
+# naive model for food sales
+naive_food <- naive(food_train, h = steps_ahead)
+food_error <- food_test - naive_food$mean[steps_ahead]
+food_rmse <- sqrt(mean(food_error^2))
+autoplot(food_train) +
+  autolayer(naive_food) +
+  ggtitle("Naive Forecasts of Food Sales")
+
+# naive model for used car sales
+naive_car <- naive(car_train, h = steps_ahead)
+car_error <- car_test - naive_car$mean[steps_ahead]
+car_rmse <- sqrt(mean(car_error^2))
+autoplot(car_train) +
+  autolayer(naive_car) +
+  ggtitle("Naive Forecasts of Used Car Sales")
+
+# naive model for pharmacy sales
+naive_pharm <- naive(pharm_train, h = steps_ahead)
+pharm_error <- pharm_test - naive_pharm$mean[steps_ahead]
+pharm_rmse <- sqrt(mean(pharm_error^2))
+autoplot(pharm_train) +
+  autolayer(naive_pharm) +
+  ggtitle("Naive Forecasts of Pharmacy Sales")
+
+# table of naive RMSEs
+
+results_tab <- matrix(c(furn_rmse, food_rmse, car_rmse, pharm_rmse), ncol = 1, byrow = TRUE)
+rownames(results_tab) <- c('naive_furn','naive_food', 'naive_car', 'naive_pharm')
+colnames(results_tab) <- c('RMSE')
+results_tab <- as.table(results_tab)
+results_tab
+
+rmse_values_n <- c(furn_rmse,food_rmse, car_rmse, pharm_rmse)
+
+```
+
+```{r}
+# FORECASTING METHOD : EXPONENTIAL SMOOTHING
+library(fpp2)
+
+# FURN SALES
+# Holt-Winters exponential smoothing
+hw_model_furn <- HoltWinters(furn_train)
+
+# Forecasting using the Holt-Winters model
+forecast_hw_furn <- forecast(hw_model_furn, h = 12)  # Forecasting 12 steps ahead
+
+# Plot
+plot(forecast_hw_furn, main = "Holt-Winters Exponential Smoothing Forecast for Furniture Sales")
+lines(furn_test, col = "red")
+legend("topright", legend = c("Forecast", "Actual"), col = c("black", "red"), lty = c(1, 1))
+
+# FOOD SALES
+# Holt-Winters exponential smoothing
+hw_model_food <- HoltWinters(food_train)
+
+# Forecasting using the Holt-Winters model
+forecast_hw_food <- forecast(hw_model_food, h = 12)  # Forecasting 12 steps ahead
+
+# Plot
+plot(forecast_hw_food, main = "Holt-Winters Exponential Smoothing Forecast for Furniture Sales")
+lines(food_test, col = "red")
+legend("topright", legend = c("Forecast", "Actual"), col = c("black", "red"), lty = c(1, 1))
+
+# CAR SALES
+# Holt-Winters exponential smoothing
+hw_model_car <- HoltWinters(car_train)
+
+# Forecasting using the Holt-Winters model
+forecast_hw_car <- forecast(hw_model_car, h = 12)  # Forecasting 12 steps ahead
+
+# Plot
+plot(forecast_hw_car, main = "Holt-Winters Exponential Smoothing Forecast for Furniture Sales")
+lines(car_test, col = "red")
+legend("topright", legend = c("Forecast", "Actual"), col = c("black", "red"), lty = c(1, 1))
+
+# PHARM SALES
+# Holt-Winters exponential smoothing
+hw_model_pharm <- HoltWinters(pharm_train)
+
+# Forecasting using the Holt-Winters model
+forecast_hw_pharm <- forecast(hw_model_pharm, h = 12)  # Forecasting 12 steps ahead
+
+# Plot
+plot(forecast_hw_pharm, main = "Holt-Winters Exponential Smoothing Forecast for Furniture Sales")
+lines(pharm_test, col = "red")
+legend("topright", legend = c("Forecast", "Actual"), col = c("black", "red"), lty = c(1, 1))
+
+# The RMSE function
+RMSE <- function(actual, forecast) {
+  sqrt(mean((actual - forecast)^2))
+}
+
+rmse_values_hw <- c(
+  RMSE(forecast_hw_furn$mean, furn_test),
+  RMSE(forecast_hw_food$mean, food_test),
+  RMSE(forecast_hw_car$mean, car_test),
+  RMSE(forecast_hw_pharm$mean, pharm_test)
+)
+
+# Printing RMSE Table
+evaluation_table <- data.frame(
+  Category = c("FURN SALES", "FOOD SALES", "CAR SALES", "PHARM SALES"),
+  RMSE = rmse_values_hw)
+
+# Print the table
+print(evaluation_table)
+```
+
+```{r}
+# MOVING AVERAGE
+
+# FURN SALES
+furn_sales.ma <- rollmean(furn_sales, k=4, align = "right")
+
+autoplot(furn_sales, series = "Actual") +
+autolayer(furn_sales.ma, series = "MovingAvg") +
+theme_classic()
+
+# FOOD SALES
+food_sales.ma <- rollmean(food_sales, k=4, align = "right")
+
+autoplot(food_sales, series = "Actual") +
+autolayer(food_sales.ma, series = "MovingAvg") +
+theme_classic()
+
+# CAR SALES
+car_sales.ma <- rollmean(car_sales, k=4, align = "right")
+
+autoplot(car_sales, series = "Actual") +
+autolayer(car_sales.ma, series = "MovingAvg") +
+theme_classic()
+
+# FOOD SALES
+food_sales.ma <- rollmean(food_sales, k=4, align = "right")
+
+autoplot(food_sales, series = "Actual") +
+autolayer(food_sales.ma, series = "MovingAvg") +
+theme_classic()
+
+# PHARM SALES
+pharm_sales.ma <- rollmean(pharm_sales, k=4, align = "right")
+
+autoplot(pharm_sales, series = "Actual") +
+autolayer(pharm_sales.ma, series = "MovingAvg") +
+theme_classic()
+
+```
+```{r}
+# SETTING UP RMSE
+RMSE <- function(actual, forecast) {
+  sqrt(mean((actual - forecast)^2, na.rm = TRUE))
+}
+
+# RMSE FOR MOVING AVERAGE.
+rmse_values_ma <- c(
+  RMSE(furn_sales, furn_sales.ma),
+  RMSE(food_sales, food_sales.ma),
+  RMSE(car_sales, car_sales.ma),
+  RMSE(pharm_sales, pharm_sales.ma)
+)
+
+# RMSE TABLE
+evaluation_table_ma <- data.frame(
+  Category = c("FURN SALES", "FOOD SALES", "CAR SALES", "PHARM SALES"),
+  RMSE = rmse_values_ma
+)
+
+```
+
+
+```{r}
+# FORECASTING METHOD : ARIMA MODEL
+
+# FURN SALES
+# ARIMA model for the furn training data.
+arima_model_furn <- auto.arima(furn_train)
+
+# Forecasting using the ARIMA model.
+forecast_values_furn <- forecast(arima_model_furn, h = 12)
+
+# Evaluating the model
+accuracy_values_furn <- accuracy(forecast_values_furn, furn_test)
+print(accuracy_values_furn)
+
+# Plotting actual vs forecasted values for FURN SALES
+plot(forecast_values_furn, main = "FURN SALES: Actual vs Forecasted", ylab = "Sales", xlab = "Time")
+lines(furn_test, col = "red")
+legend("topright", legend = c("Forecast", "Actual"), col = c("black", "red"), lty = c(1, 1))
+
+
+# FOOD SALES
+# ARIMA model for the food training data.
+arima_model_food <- auto.arima(food_train)
+
+# Forecasting using the ARIMA model.
+forecast_values_food <- forecast(arima_model_food, h = 12)
+
+# Evaluating the model
+accuracy_values_food <- accuracy(forecast_values_food, food_test)
+print(accuracy_values_food)
+
+# Plotting actual vs forecasted values for FOOD SALES
+plot(forecast_values_food, main = "FOOD SALES: Actual vs Forecasted", ylab = "Sales", xlab = "Time")
+lines(food_test, col = "red")
+legend("topright", legend = c("Forecast", "Actual"), col = c("black", "red"), lty = c(1, 1))
+
+# CAR SALES
+# ARIMA model for the car training data.
+arima_model_car <- auto.arima(car_train)
+
+# Forecasting using the ARIMA model.
+forecast_values_car <- forecast(arima_model_car, h = 12)
+
+# Evaluating the model
+accuracy_values_car <- accuracy(forecast_values_car, car_test)
+print(accuracy_values_car)
+
+# Plotting actual vs forecasted values for CAR SALES
+plot(forecast_values_car, main = "CAR SALES: Actual vs Forecasted", ylab = "Sales", xlab = "Time")
+lines(car_test, col = "red")
+legend("topright", legend = c("Forecast", "Actual"), col = c("black", "red"), lty = c(1, 1))
+
+# PHARM SALES
+# ARIMA model for the pharm training data.
+arima_model_pharm <- auto.arima(pharm_train)
+
+# Forecasting using the ARIMA model.
+forecast_values_pharm <- forecast(arima_model_pharm, h = 12)
+
+# Evaluating the model
+accuracy_values_pharm <- accuracy(forecast_values_pharm, pharm_test)
+print(accuracy_values_pharm)
+
+# Plotting actual vs forecasted values for PHARM SALES
+plot(forecast_values_pharm, main = "PHARM SALES: Actual vs Forecasted", ylab = "Sales", xlab = "Time")
+lines(pharm_test, col = "red")
+legend("topright", legend = c("Forecast", "Actual"), col = c("black", "red"), lty = c(1, 1))
+
+```
+```{r}
+# SETTING UP RMSE. 
+RMSE <- function(actual, forecast) {
+  sqrt(mean((actual - forecast)^2, na.rm = TRUE))
+}
+
+# RMSE for ARIMA MODEL.
+rmse_values_arima <- c(
+  RMSE(furn_test, forecast_values_furn$mean),
+  RMSE(food_test, forecast_values_food$mean),
+  RMSE(car_test, forecast_values_car$mean),
+  RMSE(pharm_test, forecast_values_pharm$mean)
+)
+
+# RMSE TABLE.
+rmse_table <- data.frame(
+  Category = c("FURN SALES", "FOOD SALES", "CAR SALES", "PHARM SALES"),
+  RMSE = rmse_values_arima
+)
+
+```
+
+
+```{r}
+# FORECASTING METHOD : REGRESSION METHOD
+
+# FURN SALES
+furn.lm.model <- tslm(furn_train ~ trend + season)
+summary(furn.lm.model)
+
+furn.lm.pred <- forecast(furn.lm.model, h=12)
+
+# Plotting actual vs forecasted values for FURN SALES
+plot(furn.lm.pred, main = "FURN SALES: Actual vs Forecasted", ylab = "Sales", xlab = "Time")
+lines(furn_test, col = "red")
+legend("topright", legend = c("Forecast", "Actual"), col = c("black", "red"), lty = c(1, 1))
+
+# FOOD SALES
+food.lm.model <- tslm(food_train ~ trend + season)
+summary(food.lm.model)
+
+food.lm.pred <- forecast(food.lm.model, h=12)
+
+# Plotting actual vs forecasted values for FOOD SALES
+plot(food.lm.pred, main = "FOOD SALES: Actual vs Forecasted", ylab = "Sales", xlab = "Time")
+lines(food_test, col = "red")
+legend("topright", legend = c("Forecast", "Actual"), col = c("black", "red"), lty = c(1, 1))
+
+# CAR SALES
+car.lm.model <- tslm(car_train ~ trend + season)
+summary(car.lm.model)
+
+car.lm.pred <- forecast(car.lm.model, h=12)
+
+# Plotting actual vs forecasted values for CAR SALES
+plot(car.lm.pred, main = "CAR SALES: Actual vs Forecasted", ylab = "Sales", xlab = "Time")
+lines(car_test, col = "red")
+legend("topright", legend = c("Forecast", "Actual"), col = c("black", "red"), lty = c(1, 1))
+
+# PHARM SALES
+pharm.lm.model <- tslm(pharm_train ~ trend + season)
+summary(pharm.lm.model)
+
+pharm.lm.pred <- forecast(pharm.lm.model, h=12)
+
+# Plotting actual vs forecasted values for PHARM SALES
+plot(pharm.lm.pred, main = "PHARM SALES: Actual vs Forecasted", ylab = "Sales", xlab = "Time")
+lines(pharm_test, col = "red")
+legend("topright", legend = c("Forecast", "Actual"), col = c("black", "red"), lty = c(1, 1))
+
+```
+
+
+```{r}
+# Setting up RMSE function
+RMSE <- function(actual, forecast) {
+  sqrt(mean((actual - forecast)^2, na.rm = TRUE))
+}
+
+# RMSE for linear regression
+rmse_values_lm <- c(
+  RMSE(furn_test, furn.lm.pred$mean),
+  RMSE(food_test, food.lm.pred$mean),
+  RMSE(car_test, car.lm.pred$mean),
+  RMSE(pharm_test, pharm.lm.pred$mean)
+)
+
+# RMSE TABLE
+rmse_table <- data.frame(
+  Category = c("FURN SALES", "FOOD SALES", "CAR SALES", "PHARM SALES"),
+  RMSE = rmse_values_lm
+)
+
+```
+
+```{r}
+# EVALUATION METRIC TABLE:
+
+# Create a data frame with RMSE values for each category
+Evaluation_table <- data.frame(
+  'Retail Sales Class' = c("FURN SALES", "FOOD SALES", "CAR SALES", "PHARM SALES"),
+  'Linear Regression RMSE' = rmse_values_lm,
+  'Arima RMSE' = rmse_values_arima,
+  'MA RMSE' = rmse_values_ma,
+  'Holt Winter RMSE' = rmse_values_hw,
+  'Naive RMSE' = rmse_values_n
+  
+)
+
+# Print the RMSE table
+print(Evaluation_table)
+
+```
+
+
+```{r}
+library(ggplot2)
+library(forecast)
+#library(ggpubr)
+
+
+ggplot1 <- autoplot(furn.lm.pred) +
+  geom_line(aes(x = time(furn_test), y = furn_test), col = "red") +
+  labs(title = "FURN SALES: LINEAR REGRESSION", y = "Sales", x = "Time") +
+  theme_bw() +
+  theme(legend.position = "topright") +
+  scale_color_manual(values = c("black", "red"), labels = c("Forecast", "Actual"), guide = "legend")
+
+ggplot2 <- autoplot(forecast_values_food) +
+  geom_line(aes(x = time(food_test), y = food_test), col = "red") +
+  labs(title = "FOOD SALES: ARIMA MODEL", y = "Sales", x = "Time") +
+  theme_bw() +
+  theme(legend.position = "topright") +
+  scale_color_manual(values = c("black", "red"), labels = c("Forecast", "Actual"), guide = "legend")
+
+ggplot3 <- autoplot(car_sales, series = "Actual") +
+  autolayer(car_sales.ma, series = "MovingAvg") +
+  labs(title = "CAR SALES: MOVING AVERAGE", y = "Sales", x = "Time") +
+  theme_bw() +
+  theme(legend.position = "topright") +
+  scale_color_manual(values = c("black", "red"), labels = c("Forecasted", "Actual"), guide = "legend")
+
+ggplot4 <- autoplot(forecast_values_pharm) +
+  geom_line(aes(x = time(car_test), y = car_test), col = "red") +
+  labs(title = "PHARM SALES: ARIMA MODEL", y = "Sales", x = "Time") +
+  theme_bw() +
+  theme(legend.position = "topright") +
+  scale_color_manual(values = c("black", "red"), labels = c("Forecast", "Actual"), guide = "legend")
+
+combined_ggplot <- grid.arrange(ggplot1, ggplot2, ggplot3,ggplot4, nrow = 2, ncol = 2)
+```
+
+
