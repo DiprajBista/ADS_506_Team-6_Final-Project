@@ -1,6 +1,7 @@
 # ADS_506_Team-6_Final-Project
 For the fulfillment of the ADS_506 Time Series Analysis Final Team Project
-This GitHub repository is for the fulfillment of the ADS 506 Time Series Analysis Final Team Project. This project is completed by Team 6 consisting of Roger Qin, Dip Raj Bista, and Jessica Hin. The project uses past time series data for furniture, food, used cars, and pharmaceutical retail sectors to predict customer purchasing trends. This project also observes the trends and seasonality of sales and the effects of the 2008 economic crisis. The deliverables will be R script code, data story presentation, and written report.  The project consists of the following chapters. They are as follows:
+This GitHub repository is for the fulfillment of the ADS 506 Time Series Analysis Final Team Project. This project is completed by Team 6 consisting of Roger Qin, Dip Raj Bista, and Jessica Hin. The project uses past time series data for furniture, food, used cars, and pharmaceutical retail sectors to predict customer purchasing trends. This project also observes the trends and seasonality of sales and the effects of the 2008 economic crisis. The deliverables will be R script code, data story presentation, and written report. 
+The project consists of the following chapters. They are as follows:
 
 1.	Introduction
 2.	Problem Statement
